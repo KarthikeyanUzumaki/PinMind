@@ -1,0 +1,14 @@
+{
+  "mcu": "STM32F401",
+  "supported_pwm_pins": ["PA0", "PA1", "PA2", "PA3", "PA5", "PA8", "PA15", "PB3", "PB4", "PB5", "PB10", "PB13", "PB14", "PB15"],
+  "supported_adc_pins": ["PA0", "PA1", "PA2", "PA3", "PA4", "PA5", "PA6", "PA7", "PB0", "PB1", "PC0", "PC1", "PC2", "PC3", "PC4", "PC5"],
+  "clock_limits": {
+    "min_mhz": 1,
+    "max_mhz": 84
+  },
+  "base_addresses": {
+    "RCC_BASE": "0x40023800",
+    "GPIOA_BASE": "0x40020000",
+    "GPIOB_BASE": "0x40020400"
+  }
+}

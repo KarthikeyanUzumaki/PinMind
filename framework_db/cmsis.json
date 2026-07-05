@@ -1,0 +1,13 @@
+{
+  "framework": "Bare Metal",
+  "entry_point": "int main(void)",
+  "delay_api": "for (volatile int i = 0; i < limit; i++)",
+  "gpio_api": {
+    "mode": "GPIOx->MODER",
+    "write": "GPIOx->ODR",
+    "read": "GPIOx->IDR"
+  },
+  "pwm_api": "TIMx->CCR1 / TIMx->ARR",
+  "uart_api": "USARTx->DR / USARTx->SR",
+  "includes": ["stdint.h"]
+}

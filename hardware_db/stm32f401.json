@@ -1,0 +1,14 @@
+{
+  "mcu": "STM32F401",
+  "flash_kb": 512,
+  "ram_kb": 96,
+  "supported_pwm_pins": ["PA0", "PA1", "PA2", "PA3", "PA5", "PA8", "PA15", "PB3", "PB4", "PB5", "PB10", "PB13", "PB14", "PB15"],
+  "supported_adc_pins": ["PA0", "PA1", "PA2", "PA3", "PA4", "PA5", "PA6", "PA7", "PB0", "PB1", "PC0", "PC1", "PC2", "PC3", "PC4", "PC5"],
+  "input_only_pins": [],
+  "uarts": ["USART1", "USART2", "USART6"],
+  "spis": ["SPI1", "SPI2", "SPI3", "SPI4"],
+  "i2cs": ["I2C1", "I2C2", "I2C3"],
+  "timers": ["TIM1", "TIM2", "TIM3", "TIM4", "TIM5", "TIM9", "TIM10", "TIM11"],
+  "dma_channels": ["DMA1", "DMA2"],
+  "clock_limit_mhz": 84
+}

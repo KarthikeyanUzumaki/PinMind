@@ -1,0 +1,13 @@
+{
+  "framework": "Arduino",
+  "entry_point": "void setup() / void loop()",
+  "delay_api": "delay(ms)",
+  "gpio_api": {
+    "mode": "pinMode(pin, mode)",
+    "write": "digitalWrite(pin, level)",
+    "read": "digitalRead(pin)"
+  },
+  "pwm_api": "analogWrite(pin, duty) / ledcWrite(chan, duty)",
+  "uart_api": "Serial.begin(baud) / Serial.print()",
+  "includes": ["Arduino.h"]
+}

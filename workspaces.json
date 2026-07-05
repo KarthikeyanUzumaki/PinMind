@@ -1,0 +1,72 @@
+{
+  "antiigravity_dev_core": {
+    "workspace_id": "antiigravity_dev_core",
+    "mcu": "STM32F401",
+    "gpios": [
+      {
+        "pin": "PA6",
+        "label": "LED_Pin",
+        "mode": "GPIO_Output"
+      },
+      {
+        "pin": "PA8",
+        "label": "SPI1_MISO",
+        "mode": "Alternate_Function"
+      },
+      {
+        "pin": "PA7",
+        "label": "SPI1_MOSI",
+        "mode": "Alternate_Function"
+      }
+    ],
+    "peripherals": [
+      {
+        "name": "SPI1",
+        "pins": [
+          "PA5",
+          "PA6",
+          "PA7"
+        ],
+        "dma_channel": "DMA2_Stream3_Channel3"
+      }
+    ],
+    "clocks": {
+      "sysclk_mhz": 84,
+      "apb1_mhz": 42,
+      "apb2_mhz": 84
+    }
+  },
+  "esp32_ble_mouse": {
+    "workspace_id": "esp32_ble_mouse",
+    "mcu": "ESP32-WROOM",
+    "gpios": [
+      {
+        "pin": "GPIO2",
+        "label": "Status_LED",
+        "mode": "GPIO_Output"
+      },
+      {
+        "pin": "GPIO12",
+        "label": "Button_Click",
+        "mode": "GPIO_Input"
+      }
+    ],
+    "peripherals": [],
+    "clocks": {
+      "sysclk_mhz": 240,
+      "apb1_mhz": 80,
+      "apb2_mhz": 80
+    }
+  },
+  "weather_station": {
+    "workspace_id": "weather_station",
+    "mcu": "STM32F405",
+    "gpios": [],
+    "peripherals": [],
+    "clocks": {
+      "sysclk_mhz": 168,
+      "apb1_mhz": 42,
+      "apb2_mhz": 84
+    }
+  }
+}

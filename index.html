@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <style>
+        body { margin: 0; display: flex; height: 100vh; font-family: system-ui; background: #1e1e1e; color: #fff;}
+        .panel { flex: 1; padding: 20px; display: flex; flex-direction: column; }
+        .left-panel { border-right: 2px solid #333; }
+        textarea, input { width: 100%; background: #2d2d2d; color: #00ff00; border: 1px solid #444; padding: 10px; font-family: monospace; }
+        .chat-box { flex-grow: 1; background: #2d2d2d; margin-bottom: 10px; padding: 10px; overflow-y: auto; border: 1px solid #444;}
+        button { background: #007acc; color: white; border: none; padding: 10px 20px; cursor: pointer; margin-top: 10px;}
+        button:hover { background: #005999; }
+    </style>
+</head>
+<body>
+
+    <div class="panel left-panel">
+        <h2>🛠️ Hardware Context (Cognee)</h2>
+        <p>Paste Pinout or Register JSON:</p>
+        <textarea id="hardware-input" rows="15">{"MCU": "STM32", "Pins": {"PA5": "LED_GREEN"}}</textarea>
+        <button onclick="flashContext()">Sync & Memify Map</button>
+        <button onclick="wipeContext()" style="background: #cc0000;">Wipe Revision</button>
+    </div>
+
+    <div class="panel right-panel">
+        <h2>🤖 Firmware AI Assistant</h2>
+        <div class="chat-box" id="chat-output">System Ready... Waiting for hardware context.</div>
+        <input type="text" id="user-prompt" placeholder="e.g. Write an init function for the green LED">
+        <button onclick="sendPrompt()">Generate Code</button>
+    </div>
+
+</body>
+</html>

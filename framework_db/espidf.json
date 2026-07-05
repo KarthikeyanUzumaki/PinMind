@@ -1,0 +1,13 @@
+{
+  "framework": "ESP-IDF",
+  "entry_point": "void app_main(void)",
+  "delay_api": "vTaskDelay(ms / portTICK_PERIOD_MS)",
+  "gpio_api": {
+    "mode": "gpio_set_direction(pin, mode)",
+    "write": "gpio_set_level(pin, level)",
+    "read": "gpio_get_level(pin)"
+  },
+  "pwm_api": "ledc_channel_config() / ledc_set_duty()",
+  "uart_api": "uart_driver_install() / uart_write_bytes()",
+  "includes": ["driver/gpio.h", "freertos/FreeRTOS.h", "freertos/task.h"]
+}

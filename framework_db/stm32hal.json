@@ -1,0 +1,13 @@
+{
+  "framework": "STM32 Cube HAL",
+  "entry_point": "int main(void)",
+  "delay_api": "HAL_Delay(ms)",
+  "gpio_api": {
+    "mode": "HAL_GPIO_Init(GPIOx, &GPIO_InitStruct)",
+    "write": "HAL_GPIO_WritePin(GPIOx, Pin, PinState)",
+    "read": "HAL_GPIO_ReadPin(GPIOx, Pin)"
+  },
+  "pwm_api": "HAL_TIM_PWM_ConfigChannel() / HAL_TIM_PWM_Start()",
+  "uart_api": "HAL_UART_Init() / HAL_UART_Transmit()",
+  "includes": ["stm32f4xx_hal.h"]
+}

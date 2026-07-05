@@ -1,0 +1,13 @@
+{
+  "mcu": "ESP32",
+  "supported_pwm_pins": [0, 2, 4, 5, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33],
+  "supported_adc_pins": [32, 33, 34, 35, 36, 39],
+  "clock_limits": {
+    "min_mhz": 80,
+    "max_mhz": 240
+  },
+  "base_addresses": {
+    "GPIO_OUT_REG": "0x3FF44004",
+    "GPIO_ENABLE_REG": "0x3FF44020"
+  }
+}

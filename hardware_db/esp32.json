@@ -1,0 +1,14 @@
+{
+  "mcu": "ESP32",
+  "flash_kb": 4096,
+  "ram_kb": 520,
+  "supported_pwm_pins": [0, 2, 4, 5, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33],
+  "supported_adc_pins": [32, 33, 34, 35, 36, 39],
+  "input_only_pins": [34, 35, 36, 39],
+  "uarts": ["UART0", "UART1", "UART2"],
+  "spis": ["SPI1", "SPI2", "SPI3"],
+  "i2cs": ["I2C0", "I2C1"],
+  "timers": ["TIM0", "TIM1", "TIM2", "TIM3"],
+  "dma_channels": ["DMA1", "DMA2"],
+  "clock_limit_mhz": 240
+}

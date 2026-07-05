@@ -1,0 +1,30 @@
+# Secrets
+.env
+.env.*
+firebase_service_account.json
+serviceAccountKey.json
+firebase-adminsdk*.json
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Node
+node_modules/
+
+# PlatformIO
+.pio/
+
+# Build
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

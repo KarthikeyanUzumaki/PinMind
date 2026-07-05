@@ -1,0 +1,20 @@
+{
+  "mcu": "ESP32-WROOM",
+  "framework": "Arduino",
+  "compiler": "Xtensa GCC",
+  "board": "ESP32 DevModule",
+  "platformio_env": "esp32dev",
+  "clocks": {
+    "sysclk_mhz": 84,
+    "apb1_mhz": 42,
+    "apb2_mhz": 84
+  },
+  "gpios": [
+    {
+      "pin": "GPIO20",
+      "label": "led",
+      "mode": "GPIO_Output"
+    }
+  ],
+  "peripherals": []
+}
