@@ -8,10 +8,41 @@ export default function MemoryGraph({
   peripherals = [],
   isGenerating = false,
   hasFirmware = false,
-  presentMode = false
+  presentMode = false,
+  isLoading = false
 }) {
   const [selectedNode, setSelectedNode] = useState(null);
   const [hoveredNode, setHoveredNode] = useState(null);
+
+  if (isLoading) {
+    return (
+      <div className="w-full flex flex-col rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-surface-2)] overflow-hidden shadow-2xl animate-pulse">
+        <div className="flex justify-between items-center px-4 py-3 bg-[var(--pm-surface)] border-b border-[var(--pm-border)]">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded bg-[var(--accent)] animate-pulse" />
+            <span className="text-[10px] font-bold uppercase tracking-wider font-mono-editor text-[var(--pm-text-muted)]">
+              Recalling Graph Memory...
+            </span>
+          </div>
+        </div>
+        <div className="relative w-full overflow-hidden bg-[#07080c] flex flex-col items-center justify-center gap-4" style={{ height: '220px' }}>
+          {/* Skeleton representation of graph nodes */}
+          <div className="flex justify-around w-full px-8 items-center h-full">
+            <div className="w-24 h-9 rounded-lg bg-slate-800/40 border border-slate-700/20" />
+            <div className="w-1.5 h-1.5 rounded-full bg-slate-800" />
+            <div className="w-1.5 h-1.5 rounded-full bg-slate-800" />
+            <div className="w-1.5 h-1.5 rounded-full bg-slate-800" />
+            <div className="w-28 h-9 rounded-lg bg-slate-800/40 border border-slate-700/20" />
+            <div className="w-1.5 h-1.5 rounded-full bg-slate-800" />
+            <div className="w-1.5 h-1.5 rounded-full bg-slate-800" />
+            <div className="w-1.5 h-1.5 rounded-full bg-slate-800" />
+            <div className="w-32 h-9 rounded-lg bg-slate-800/40 border border-slate-700/20" />
+          </div>
+          <div className="text-[9px] font-mono-editor text-slate-500 uppercase tracking-widest absolute bottom-4">Constructing relation vectors...</div>
+        </div>
+      </div>
+    );
+  }
 
   // Dynamic nodes array mapping exactly what is configured
   const items = [];

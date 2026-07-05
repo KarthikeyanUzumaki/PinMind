@@ -36,6 +36,28 @@ const SessionSpinner = () => (
   </div>
 );
 
+// ─── Screen shown if backend connection fails ────────────────────────────────
+const ConnectionErrorScreen = ({ onRetry }) => (
+  <div
+    className="h-screen w-screen flex flex-col items-center justify-center p-6 text-center"
+    style={{ background: 'var(--pm-bg)' }}
+  >
+    <div className="max-w-sm space-y-4 font-mono-editor">
+      <div className="text-[var(--error)] text-lg font-bold">⚠️ CONNECTION ERROR</div>
+      <p className="text-xs text-[var(--pm-text-muted)] leading-relaxed">
+        Unable to connect to the PinMind Firmware Intelligence API. Please verify that the backend server is running and accessible.
+      </p>
+      <button
+        onClick={onRetry}
+        className="px-6 py-2.5 bg-[var(--accent)] text-white text-xs font-bold rounded-xl cursor-pointer hover:brightness-110 transition-all"
+        style={{ boxShadow: '0 4px 12px var(--accent-glow)' }}
+      >
+        Retry Connection
+      </button>
+    </div>
+  </div>
+);
+
 // ─── Inner app — has access to ToastContext ───────────────────────────────────
 function AppInner() {
   const { toast } = useToast();
@@ -45,6 +67,8 @@ function AppInner() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authToken,   setAuthToken]   = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [connectionError, setConnectionError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   const { settings, updateSettings } = useSettings(authToken);
 
@@ -70,26 +94,41 @@ function AppInner() {
       if (res.ok) {
         const data = await res.json();
         setUserSettings(data);
+        setConnectionError(false);
         return data;
       }
-    } catch (_) {}
+    } catch (_) {
+      setConnectionError(true);
+    }
     return null;
   }, []);
+
+  const handleRetryConnection = () => {
+    setConnectionError(false);
+    setRetryCount(prev => prev + 1);
+  };
 
   // ── Firebase auth listener ────────────────────────────────────────────────
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       setAuthLoading(true);
+      setConnectionError(false);
       if (user) {
         setCurrentUser(user);
-        const token = await user.getIdToken();
-        setAuthToken(token);
-        const data = await fetchUserSettings(token);
-        // Route: first-time (no key) → onboarding, else → workspace
-        if (data && !data.has_key) {
-          setCurrentView('onboarding');
-        } else {
-          setCurrentView('workspace');
+        try {
+          const token = await user.getIdToken();
+          setAuthToken(token);
+          const data = await fetchUserSettings(token);
+          if (data) {
+            if (!data.has_key) {
+              setCurrentView('onboarding');
+            } else {
+              setCurrentView('workspace');
+            }
+          }
+        } catch (e) {
+          console.error(e);
+          setConnectionError(true);
         }
       } else {
         setCurrentUser(null);
@@ -99,7 +138,7 @@ function AppInner() {
       setAuthLoading(false);
     });
     return () => unsub();
-  }, []);
+  }, [retryCount]);
 
   // ── Global keyboard shortcuts ─────────────────────────────────────────────
   useEffect(() => {
@@ -195,6 +234,7 @@ function AppInner() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   if (authLoading) return <SessionSpinner />;
+  if (connectionError) return <ConnectionErrorScreen onRetry={handleRetryConnection} />;
 
   return (
     <>

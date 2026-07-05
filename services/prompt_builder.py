@@ -99,5 +99,9 @@ Peripheral Attachments:
 {headers_str}
    - Use symbolic CMSIS or framework macros (e.g., `GPIOA->MODER`, `PORTB`, `GPIO_PIN_5`) instead of magic register numbers or hardcoded hexadecimal offsets where possible.
    - Never mix framework conventions. Do NOT generate Arduino APIs inside ESP-IDF or Bare Metal projects.
+4. NO MARKDOWN OR AI BANNERS:
+   - Do NOT wrap the generated code inside markdown code blocks (do NOT use ```c or ```cpp backticks).
+   - Do NOT include any markdown banners, title headers, or explanations.
+   - Output only raw compilable source code lines directly.
 """
     return system_instruction

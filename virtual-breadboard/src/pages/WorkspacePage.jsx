@@ -96,11 +96,17 @@ const getDefaultPlatformioEnv = (mcu) => {
 // Clean PINMIND headers while preserving formatting & professional developer comments
 const cleanCode = (code) => {
   if (!code) return '';
-  const match = code.match(/^\/\*[\s\S]*?PINMIND[\s\S]*?\*\/\s*/i);
+  let clean = code;
+  // 1. Remove markdown fences (e.g. ```c, ```cpp, ```)
+  clean = clean.replace(/^```[a-zA-Z0-9+#]*\n/gm, '');
+  clean = clean.replace(/```$/gm, '');
+  
+  // 2. Remove PINMIND banners if present
+  const match = clean.match(/^\/\*[\s\S]*?PINMIND[\s\S]*?\*\/\s*/i);
   if (match) {
-    return code.substring(match[0].length);
+    clean = clean.substring(match[0].length);
   }
-  return code;
+  return clean.trim();
 };
 
 const parseCodeMetadata = (code, msg, mcuVal, frameworkVal) => {
@@ -193,6 +199,11 @@ export default function WorkspacePage({
   const [workspaces, setWorkspaces]     = useState([]);
   const [newWsName, setNewWsName]       = useState('');
   const [showAddWs, setShowAddWs]       = useState(false);
+  const [showRenameWs, setShowRenameWs] = useState(false);
+  const [renameWsName, setRenameWsName] = useState('');
+  const [isDemoRunning, setIsDemoRunning] = useState(false);
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [isGraphLoading, setIsGraphLoading] = useState(false);
 
   // Hardware states
   const [mcu, setMcu]                     = useState('ESP32-WROOM');
@@ -287,6 +298,23 @@ export default function WorkspacePage({
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Auto-progress pipeline step loading indicators
+  useEffect(() => {
+    if (!isGenerating) {
+      setActivePipelineStep(0);
+      return;
+    }
+    setActivePipelineStep(1); // Cognee recall
+    const t1 = setTimeout(() => setActivePipelineStep(2), 1200); // Planner
+    const t2 = setTimeout(() => setActivePipelineStep(3), 2800); // Gemini
+    const t3 = setTimeout(() => setActivePipelineStep(4), 5200); // Compiler verification
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [isGenerating]);
+
   // Rotate Claude/Cursor-style tips
   useEffect(() => {
     const timer = setInterval(() => {
@@ -344,6 +372,13 @@ export default function WorkspacePage({
 
   useEffect(() => {
     if (!authToken || !workspaceId) return;
+    
+    // Clear old workspace states instantly to prevent layout flash of old data
+    setMessages([]);
+    setGraphData({ nodes: [], edges: [] });
+    setGpios([]);
+    setPeripherals([]);
+
     setShowLoadOverlay(true);
     setLoadSteps([]);
     const steps = ['Workspace Loaded', 'Hardware Restored', 'Graph Restored', 'Ready'];
@@ -359,6 +394,7 @@ export default function WorkspacePage({
 
   const fetchWorkspaceData = async (wId, token) => {
     addLog(`Loading graph memory: ${wId}`);
+    setIsGraphLoading(true);
     try {
       const [memRes, hwRes] = await Promise.all([
         fetch(`${BACKEND_URL}/api/memory?workspace_id=${wId}`, { headers: { 'Authorization': `Bearer ${token}` } }),
@@ -378,14 +414,22 @@ export default function WorkspacePage({
         setPeripherals(hw.peripherals || []);
         runLocalValidation(hw.gpios || [], hw.peripherals || [], selectedMcu, hw.clocks || { sysclk_mhz: 84, apb1_mhz: 42, apb2_mhz: 84 });
       }
-    } catch (e) { addLog(`Error: ${e.message}`); }
+    } catch (e) { 
+      addLog(`Error loading workspace context: ${e.message}`); 
+    } finally {
+      setIsGraphLoading(false);
+    }
   };
 
   const fetchChatHistory = async (wId, token) => {
+    setIsChatLoading(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/chats?workspace_id=${wId}`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (res.ok) setMessages(await res.json());
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      setIsChatLoading(false);
+    }
   };
 
   const runLocalValidation = (g, p, m, c) => {
@@ -521,32 +565,105 @@ export default function WorkspacePage({
 
   // ── Create workspace ──────────────────────────────────────────────────────
   const handleCreateWorkspace = async () => {
-    if (!newWsName.trim() || !authToken) return;
-    const id = newWsName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const trimmedName = newWsName.trim();
+    if (!trimmedName) {
+      toast?.error('Workspace name cannot be empty');
+      return;
+    }
+    if (!/^[a-zA-Z0-9\s-_]+$/.test(trimmedName)) {
+      toast?.error('Name contains invalid characters (use alphanumeric, spaces, dash, or underscore)');
+      return;
+    }
+    const isDuplicate = workspaces.some(w => w.name.toLowerCase() === trimmedName.toLowerCase());
+    if (isDuplicate) {
+      toast?.error('A workspace with this name already exists');
+      return;
+    }
+
     try {
-      const res = await fetch(`${BACKEND_URL}/api/hardware/save`, {
+      const res = await fetch(`${BACKEND_URL}/api/workspace`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-        body: JSON.stringify({ workspace_id: id, mcu: 'ESP32-WROOM', gpios: [], peripherals: [], clocks: { sysclk_mhz: 84, apb1_mhz: 42, apb2_mhz: 84 } }),
+        headers: { 
+          'Content-Type': 'application/json', 
+          'Authorization': `Bearer ${authToken}` 
+        },
+        body: JSON.stringify({ name: trimmedName }),
       });
       if (res.ok) {
-        await fetchWorkspaces(authToken);
-        setWorkspaceId(id);
+        const newWs = await res.json();
+        setWorkspaces(prev => [newWs, ...prev]);
+        setWorkspaceId(newWs.id);
         setNewWsName('');
         setShowAddWs(false);
-        toast?.success(`Workspace "${newWsName}" created`);
+        toast?.success(`Workspace "${trimmedName}" created successfully!`);
+        
+        setCogneeStatus({
+          action: 'remember()',
+          type: 'Saving',
+          message: 'Knowledge Stored'
+        });
+        setTimeout(() => setCogneeStatus(null), 3500);
+      } else {
+        const errData = await res.json();
+        toast?.error(errData.detail || 'Failed to create workspace');
       }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      toast?.error('Network error creating workspace');
+    }
+  };
+
+  // ── Rename workspace ──────────────────────────────────────────────────────
+  const handleRenameWorkspace = async () => {
+    const trimmedName = renameWsName.trim();
+    if (!trimmedName) {
+      toast?.error('Workspace name cannot be empty');
+      return;
+    }
+    if (!/^[a-zA-Z0-9\s-_]+$/.test(trimmedName)) {
+      toast?.error('Name contains invalid characters');
+      return;
+    }
+    const isDuplicate = workspaces.some(w => w.name.toLowerCase() === trimmedName.toLowerCase() && w.id !== workspaceId);
+    if (isDuplicate) {
+      toast?.error('Another workspace already has this name');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/workspace/${workspaceId}/rename`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json', 
+          'Authorization': `Bearer ${authToken}` 
+        },
+        body: JSON.stringify({ name: trimmedName }),
+      });
+      if (res.ok) {
+        toast?.success('Workspace renamed successfully');
+        setWorkspaces(prev => prev.map(w => w.id === workspaceId ? { ...w, name: trimmedName } : w));
+        setShowRenameWs(false);
+        setRenameWsName('');
+      } else {
+        const errData = await res.json();
+        toast?.error(errData.detail || 'Failed to rename workspace');
+      }
+    } catch (e) {
+      toast?.error('Network error renaming workspace');
+    }
   };
 
   // ── Delete workspace ──────────────────────────────────────────────────────
   const handleDeleteWorkspace = async () => {
     if (!workspaceId || !authToken) return;
-    if (!confirm('Purge this workspace and all Cognee memory associations?')) return;
+    const currentName = workspaces.find(w => w.id === workspaceId)?.name || 'this workspace';
+    if (!confirm(`Are you sure you want to purge "${currentName}"? This will permanently wipe all chat history, hardware context, and Cognee knowledge graph associations.`)) {
+      return;
+    }
+    
     setCogneeStatus({
       action: 'forget()',
       type: 'Deleting',
-      message: 'Workspace removed'
+      message: 'Knowledge Removed'
     });
     setTimeout(() => setCogneeStatus(null), 3500);
 
@@ -556,16 +673,210 @@ export default function WorkspacePage({
         headers: { 'Authorization': `Bearer ${authToken}` },
       });
       if (res.ok) {
-        toast?.info('Workspace memory deleted.');
-        const r2 = await fetch(`${BACKEND_URL}/api/workspaces`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-        if (r2.ok) {
-          const d2 = await r2.json();
-          setWorkspaces(d2);
-          if (d2.length > 0) setWorkspaceId(d2[0].id);
-          else setWorkspaceId('');
+        toast?.success(`Workspace "${currentName}" memory purged.`);
+        const remainingWorkspaces = workspaces.filter(w => w.id !== workspaceId);
+        setWorkspaces(remainingWorkspaces);
+        
+        if (remainingWorkspaces.length > 0) {
+          setWorkspaceId(remainingWorkspaces[0].id);
+        } else {
+          await fetchWorkspaces(authToken);
+        }
+        
+        setGpios([]);
+        setPeripherals([]);
+        setMessages([]);
+        setGraphData({ nodes: [], edges: [] });
+      } else {
+        toast?.error('Failed to delete workspace');
+      }
+    } catch (e) {
+      toast?.error('Network error deleting workspace');
+    }
+  };
+
+  // ── One-Click Judges Demo Mode ────────────────────────────────────────────
+  const handleRunDemoMode = async () => {
+    if (isDemoRunning || !authToken) return;
+    setIsDemoRunning(true);
+    toast?.info('Starting 10-second automated judges demo flow...');
+    
+    try {
+      // 1. Create fresh demo workspace
+      const demoWsName = `Demo_Project`;
+      addLog(`[Demo Mode] Creating workspace: ${demoWsName}`);
+      let res = await fetch(`${BACKEND_URL}/api/workspace`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({ name: demoWsName })
+      });
+      if (!res.ok) {
+        // If "Demo_Project" already exists, rename/delete first or just use it.
+        // We'll proceed or generate a random one to avoid name collision.
+        const randWsName = `Demo_Project_${Math.floor(Math.random() * 1000)}`;
+        res = await fetch(`${BACKEND_URL}/api/workspace`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+          body: JSON.stringify({ name: randWsName })
+        });
+      }
+      
+      const wsData = await res.json();
+      setWorkspaces(prev => [wsData, ...prev]);
+      setWorkspaceId(wsData.id);
+      
+      await new Promise(r => setTimeout(r, 800));
+      
+      // 2. Configure GPIO32 as LED
+      addLog('[Demo Mode] Configuring Pin GPIO32 as status LED...');
+      const demoGpios = [{ pin: 'GPIO32', label: 'Status_LED', mode: 'GPIO_Output' }];
+      setGpios(demoGpios);
+      setMcu('ESP32-WROOM');
+      setFramework('Arduino');
+      setBoard('ESP32 DevModule');
+      setPlatformioEnv('esp32dev');
+      
+      await new Promise(r => setTimeout(r, 600));
+      
+      // 3. Save Hardware -> remember()
+      addLog('[Demo Mode] Syncing context: calling Cognee remember()');
+      setCogneeStatus({ action: 'remember()', type: 'Saving', message: 'Knowledge Stored' });
+      
+      res = await fetch(`${BACKEND_URL}/api/hardware/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({
+          workspace_id: wsData.id,
+          mcu: 'ESP32-WROOM',
+          framework: 'Arduino',
+          compiler: 'Xtensa GCC',
+          board: 'ESP32 DevModule',
+          platformio_env: 'esp32dev',
+          gpios: demoGpios,
+          peripherals: [],
+          clocks: { sysclk_mhz: 240, apb1_mhz: 0, apb2_mhz: 0 }
+        })
+      });
+      
+      // Fetch updated graph
+      const graphRes = await fetch(`${BACKEND_URL}/api/memory?workspace_id=${wsData.id}`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      if (graphRes.ok) setGraphData(await graphRes.json());
+      
+      await new Promise(r => setTimeout(r, 1200));
+      setCogneeStatus(null);
+      
+      // 4. Prompt: Generate LED Fade over 3 seconds
+      const demoPrompt = 'Generate LED Fade over 3 seconds';
+      addLog(`[Demo Mode] Prompting AI: "${demoPrompt}"`);
+      setChatInput('');
+      setMessages(prev => [...prev, { role: 'user', content: demoPrompt }]);
+      setIsGenerating(true);
+      setActivePipelineStep(1);
+      
+      setCogneeStatus({ action: 'recall()', type: 'Generating', message: 'Hardware Context Retrieved' });
+      const promptStartTime = Date.now();
+      
+      res = await fetch(`${BACKEND_URL}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({ workspace_id: wsData.id, prompt: demoPrompt })
+      });
+      if (res.ok) {
+        const chatData = await res.json();
+        chatData.logs?.forEach(l => addLog(l));
+        const dur = ((Date.now() - promptStartTime) / 1000).toFixed(1);
+        setGenerationTime(dur);
+        setGenerationMetadata({ model: 'Gemini 3.5', time: dur });
+        fetchChatHistory(wsData.id, authToken);
+      }
+      setIsGenerating(false);
+      setCogneeStatus(null);
+      
+      await new Promise(r => setTimeout(r, 1500));
+      
+      // 5. Change GPIO32 to GPIO25 -> improve()
+      addLog('[Demo Mode] Re-mapping Pin: GPIO32 -> GPIO25');
+      const updatedGpios = [{ pin: 'GPIO25', label: 'Status_LED', mode: 'GPIO_Output' }];
+      setGpios(updatedGpios);
+      
+      await new Promise(r => setTimeout(r, 500));
+      
+      addLog('[Demo Mode] Updating context: calling Cognee improve()');
+      setCogneeStatus({ action: 'improve()', type: 'Editing', message: 'Knowledge Updated' });
+      
+      res = await fetch(`${BACKEND_URL}/api/hardware/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({
+          workspace_id: wsData.id,
+          mcu: 'ESP32-WROOM',
+          framework: 'Arduino',
+          compiler: 'Xtensa GCC',
+          board: 'ESP32 DevModule',
+          platformio_env: 'esp32dev',
+          gpios: updatedGpios,
+          peripherals: [],
+          clocks: { sysclk_mhz: 240, apb1_mhz: 0, apb2_mhz: 0 }
+        })
+      });
+      
+      const graphRes2 = await fetch(`${BACKEND_URL}/api/memory?workspace_id=${wsData.id}`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      if (graphRes2.ok) setGraphData(await graphRes2.json());
+      
+      await new Promise(r => setTimeout(r, 1200));
+      setCogneeStatus(null);
+      
+      // 6. Generate Again
+      addLog('[Demo Mode] Regenerating firmware with updated hardware specifications...');
+      setIsGenerating(true);
+      setActivePipelineStep(1);
+      setCogneeStatus({ action: 'recall()', type: 'Generating', message: 'Hardware Context Retrieved' });
+      
+      res = await fetch(`${BACKEND_URL}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({ workspace_id: wsData.id, prompt: demoPrompt })
+      });
+      if (res.ok) {
+        fetchChatHistory(wsData.id, authToken);
+      }
+      setIsGenerating(false);
+      setCogneeStatus(null);
+      
+      await new Promise(r => setTimeout(r, 1500));
+      
+      // 7. Delete Workspace -> forget()
+      addLog('[Demo Mode] Purging Demo Workspace: calling Cognee forget()');
+      setCogneeStatus({ action: 'forget()', type: 'Deleting', message: 'Knowledge Removed' });
+      
+      res = await fetch(`${BACKEND_URL}/api/workspace/${wsData.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      if (res.ok) {
+        const remainingWorkspaces = workspaces.filter(w => w.id !== wsData.id);
+        setWorkspaces(remainingWorkspaces);
+        if (remainingWorkspaces.length > 0) {
+          setWorkspaceId(remainingWorkspaces[0].id);
+        } else {
+          await fetchWorkspaces(authToken);
         }
       }
-    } catch (e) { console.error(e); }
+      
+      await new Promise(r => setTimeout(r, 800));
+      setCogneeStatus(null);
+      toast?.success('Automated judges demo completed successfully!');
+      addLog('[Demo Mode] Demo sequence completed.');
+    } catch (e) {
+      console.error(e);
+      toast?.error(`Demo interrupted: ${e.message}`);
+    } finally {
+      setIsDemoRunning(false);
+    }
   };
 
   const handleCopyCode = (text) => {
@@ -668,6 +979,29 @@ export default function WorkspacePage({
           </div>
 
           <button 
+            onClick={handleRunDemoMode} 
+            disabled={isDemoRunning}
+            className="px-3 py-1 rounded-full border hover:bg-[var(--accent)] hover:text-white text-[9px] font-bold font-mono-editor transition-all cursor-pointer flex items-center gap-1.5"
+            style={{ 
+              color: 'var(--accent)', 
+              background: isDemoRunning ? 'var(--accent-dim)' : 'transparent',
+              borderColor: 'var(--accent)',
+              opacity: isDemoRunning ? 0.6 : 1
+            }}
+          >
+            {isDemoRunning ? (
+              <>
+                <div className="w-2.5 h-2.5 border border-current border-t-transparent rounded-full animate-spin" />
+                <span>Running Demo...</span>
+              </>
+            ) : (
+              <>
+                <span>⚡ Run Demo Mode</span>
+              </>
+            )}
+          </button>
+
+          <button 
             onClick={() => setPresentMode(!presentMode)} 
             className="px-2.5 py-1 rounded border border-[var(--pm-border)] hover:border-[var(--accent)] hover:text-[var(--accent)] text-[9px] font-bold font-mono-editor transition-colors cursor-pointer"
             style={{ color: presentMode ? 'var(--accent)' : 'var(--pm-text-muted)', background: presentMode ? 'var(--accent-dim)' : 'transparent' }}
@@ -716,13 +1050,44 @@ export default function WorkspacePage({
                 </div>
               )}
 
-              <select value={workspaceId} onChange={e => setWorkspaceId(e.target.value)}
-                className="w-full rounded-xl px-3 py-2 text-xs font-mono-editor outline-none appearance-none cursor-pointer"
-                style={{ background: 'var(--pm-surface-2)', border: '1px solid var(--pm-border)', color: 'var(--pm-text)' }}>
-                {workspaces.map(w => (
-                  <option key={w.id} value={w.id}>{w.name}</option>
-                ))}
-              </select>
+              <div className="flex gap-2 items-center">
+                <div className="relative flex-1">
+                  <select value={workspaceId} onChange={e => setWorkspaceId(e.target.value)}
+                    className="w-full rounded-xl pl-3 pr-8 py-2 text-xs font-mono-editor outline-none appearance-none cursor-pointer"
+                    style={{ background: 'var(--pm-surface-2)', border: '1px solid var(--pm-border)', color: 'var(--pm-text)' }}>
+                    {workspaces.map(w => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
+                  <span className="absolute right-3 top-2.5 text-[8px] pointer-events-none" style={{ color: 'var(--pm-text-muted)' }}>▼</span>
+                </div>
+                
+                <button 
+                  onClick={() => { 
+                    const currentName = workspaces.find(w => w.id === workspaceId)?.name || '';
+                    setRenameWsName(currentName);
+                    setShowRenameWs(true); 
+                  }} 
+                  title="Rename Workspace"
+                  className="p-2 rounded-xl border border-[var(--pm-border)] bg-[var(--pm-surface-2)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-all cursor-pointer text-[var(--pm-text-muted)]"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+              </div>
+
+              {showRenameWs && (
+                <div className="flex gap-1.5 mt-2 p-2 rounded-lg" style={{ background: 'var(--pm-surface-2)', border: '1px solid var(--pm-border)' }}>
+                  <input type="text" placeholder="Rename workspace..."
+                    value={renameWsName} onChange={e => setRenameWsName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleRenameWorkspace()}
+                    className="flex-1 text-xs px-2 py-1 rounded font-mono-editor outline-none bg-[var(--pm-bg)] text-[var(--pm-text)]"
+                  />
+                  <button onClick={handleRenameWorkspace} className="px-2.5 py-1 bg-[var(--accent)] text-white text-[10px] rounded font-bold">Save</button>
+                  <button onClick={() => setShowRenameWs(false)} className="px-2 py-1 border rounded text-[10px] text-[var(--pm-text-muted)]">Cancel</button>
+                </div>
+              )}
             </div>
 
             {/* Workspace Reassuring Status Card */}
@@ -997,8 +1362,20 @@ export default function WorkspacePage({
           {/* Chat Messages Log */}
           <div className="flex-grow overflow-y-auto p-5 space-y-6">
             
-            {/* Empty Chat State Illustration */}
-            {messages.length === 0 && (
+            {/* Chat History Skeleton Loader */}
+            {isChatLoading ? (
+              <div className="space-y-6 animate-pulse font-mono-editor">
+                <div className="flex justify-start">
+                  <div className="max-w-[70%] space-y-2">
+                    <div className="w-48 h-8 rounded-xl bg-[var(--pm-surface-2)]" />
+                    <div className="w-64 h-16 rounded-xl bg-[var(--pm-surface-2)]" />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <div className="w-40 h-8 rounded-xl bg-[var(--accent-dim)]" />
+                </div>
+              </div>
+            ) : messages.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center text-center max-w-sm mx-auto space-y-4 font-mono-editor">
                 <div className="p-4 rounded-full border border-[var(--pm-border)] bg-[var(--pm-surface-2)] text-[var(--accent)] animate-pulse shadow-xl">
                   <I.Terminal/>
@@ -1194,12 +1571,22 @@ export default function WorkspacePage({
                 <div className="p-4 rounded-xl border border-[var(--pm-border)] bg-[var(--pm-surface-2)] space-y-3 font-mono-editor shadow-lg animate-pulse w-full">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--accent)] flex items-center gap-1.5">
                     <div className="w-2.5 h-2.5 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
-                    Recalling Context from Cognee...
+                    {activePipelineStep <= 1 && "Recalling Context from Cognee..."}
+                    {activePipelineStep === 2 && "Running Task Planner..."}
+                    {activePipelineStep === 3 && "Synthesizing Driver via Gemini..."}
+                    {activePipelineStep >= 4 && "Verifying & Compiling Code..."}
                   </div>
                   <div className="space-y-1 text-[9px] text-[var(--pm-text-muted)]">
                     <div>Workspace: {workspaceId}</div>
                     <div>Target: {mcu} ({framework})</div>
-                    <div>Registers: Resolving...</div>
+                    <div>
+                      Pipeline: {
+                        activePipelineStep <= 1 ? "recall() active" : 
+                        activePipelineStep === 2 ? "plan_engineering_task()" : 
+                        activePipelineStep === 3 ? "generate_firmware_code()" : 
+                        "verify_compilation() / dry_run"
+                      }
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1278,6 +1665,7 @@ export default function WorkspacePage({
               isGenerating={isGenerating} 
               hasFirmware={messages.some(m => m.role === 'ai')} 
               presentMode={presentMode} 
+              isLoading={isGraphLoading}
             />
           </div>
 

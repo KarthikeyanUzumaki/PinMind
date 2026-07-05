@@ -552,7 +552,7 @@ class PeripheralCompatibilityRule(ConflictRule):
 # ═══════════════════════════════════════════════════════════
 # POST-GENERATION FIRMWARE / REGISTER VALIDATION
 # ═══════════════════════════════════════════════════════════
-def post_validate_registers(code: str, mcu: str) -> List[str]:
+def post_validate_registers(code: str, mcu: str, context: Dict[str, Any] = None) -> List[str]:
     """
     Parses generated C code to extract hexadecimal base addresses and register names
     and cross-checks them against the selected MCU's register database record.
@@ -595,7 +595,26 @@ def post_validate_registers(code: str, mcu: str) -> List[str]:
     words = re.findall(r"\b[A-Z][A-Z0-9_]{3,24}\b", code)
     valid_regs = db_entry.get("registers", [])
     
+    # Extract configured GPIO pins & labels
+    gpio_exclusions = set()
+    if context:
+        for gpio in context.get("gpios", []):
+            pin = gpio.get("pin", "")
+            label = gpio.get("label", "")
+            if pin:
+                gpio_exclusions.add(pin.upper())
+            if label:
+                gpio_exclusions.add(label.upper())
+                gpio_exclusions.add(f"{label.upper()}_PIN")
+                gpio_exclusions.add(f"PIN_{label.upper()}")
+
     for w in set(words):
+        if w in gpio_exclusions:
+            continue
+        # Exclude standard pin name formats (GPIO32, GPIO25, etc.) and protocol instance formats (UART0, SPI2)
+        if re.match(r"^(GPIO|UART|SPI|I2C)\d+$", w):
+            continue
+            
         is_reg_like = any(p in w for p in ["RCC_", "GPIO", "SPI", "USART", "I2C", "DMA", "PORT", "DDR", "PIN", "UART"])
         if is_reg_like and w not in valid_bases:
             stripped_name = w
@@ -610,7 +629,7 @@ def post_validate_registers(code: str, mcu: str) -> List[str]:
                     break
             
             if stripped_name not in valid_regs and not any(vr in w for vr in valid_regs):
-                if w not in ["NULL", "CMSIS", "CORTEX", "STM32", "ESP32", "XTENSA", "PICO", "AVR", "INPUT", "OUTPUT", "HIGH", "LOW"]:
+                if w not in ["NULL", "CMSIS", "CORTEX", "STM32", "ESP32", "XTENSA", "PICO", "AVR", "INPUT", "OUTPUT", "HIGH", "LOW", "LED_PIN", "STATUS_LED", "PIN", "UART", "SPI", "I2C", "SERIAL", "TXD_PIN", "RXD_PIN"]:
                     other_mcus = []
                     for other_mcu, other_entry in MCU_HARDWARE_DATABASE.items():
                         if other_mcu == mcu:

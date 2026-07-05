@@ -136,21 +136,21 @@ def run_dry_run_syntax_check(code: str, context: Dict[str, Any]) -> Tuple[bool, 
     lines = code.splitlines()
     for idx, line in enumerate(lines, 1):
         line_strip = line.strip()
+        # Strip inline comments (e.g. // comment or /* comment */)
+        line_no_comment = line.split("//")[0].split("/*")[0].strip()
+        
         # Look for typical statements that require semicolon
         if (
-            line_strip and 
-            not line_strip.endswith(";") and 
-            not line_strip.endswith("{") and 
-            not line_strip.endswith("}") and 
-            not line_strip.startswith("#") and 
-            not line_strip.startswith("//") and 
-            not line_strip.startswith("/*") and 
-            not line_strip.startswith("*") and
-            not line_strip.endswith(":") and # Labels or cases
-            re.search(r'[A-Za-z0-9_)]$', line_strip)
+            line_no_comment and 
+            not line_no_comment.endswith(";") and 
+            not line_no_comment.endswith("{") and 
+            not line_no_comment.endswith("}") and 
+            not line_no_comment.startswith("#") and 
+            not line_no_comment.endswith(":") and # Labels or cases
+            re.search(r'[A-Za-z0-9_)]$', line_no_comment)
         ):
             # Verify if it's not a function header (e.g. void setup())
-            if not re.search(r'\b(void|int|setup|loop|main|app_main)\s*\(', line_strip):
+            if not re.search(r'\b(void|int|setup|loop|main|app_main)\s*\(', line_no_comment):
                 errors.append(f"Syntax Error [line {idx}]: Statement appears to be missing a trailing semicolon ';'. Line: '{line_strip}'")
 
     # 3. Check for Framework entry points

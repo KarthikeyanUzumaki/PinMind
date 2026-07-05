@@ -36,3 +36,9 @@ class ApiKeyPayload(BaseModel):
 
 class UserPreferencesPayload(BaseModel):
     preferences: dict
+
+class WorkspaceRenamePayload(BaseModel):
+    name: str
+
+class WorkspaceCreatePayload(BaseModel):
+    name: str

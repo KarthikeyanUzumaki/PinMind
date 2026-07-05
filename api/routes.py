@@ -48,8 +48,111 @@ async def get_user_workspaces(
     ensure_db_user_exists(db, current_user)
     workspaces = db.query(models.Workspace).filter_by(user_id=current_user["uid"]).order_by(models.Workspace.created_at.desc()).all()
     
-    # Return mapping lists
+    if not workspaces:
+        import uuid
+        ws_id = f"project_{str(uuid.uuid4())[:8]}"
+        workspace = models.Workspace(
+            id=ws_id,
+            user_id=current_user["uid"],
+            name="My Workspace"
+        )
+        db.add(workspace)
+        db.commit()
+        db.refresh(workspace)
+        
+        hc = models.HardwareContext(
+            workspace_id=workspace.id,
+            mcu="ESP32-WROOM",
+            framework="Arduino",
+            compiler="Xtensa GCC",
+            board="ESP32 DevModule",
+            platformio_env="esp32dev",
+            clocks={"sysclk_mhz": 240, "apb1_mhz": 0, "apb2_mhz": 0},
+            gpios=[],
+            peripherals=[]
+        )
+        db.add(hc)
+        db.commit()
+        workspaces = [workspace]
+        
     return [{"id": w.id, "name": w.name} for w in workspaces]
+
+@router.post("/api/workspace")
+async def create_workspace(
+    payload: schemas.WorkspaceCreatePayload,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Creates a new workspace, auto-generates ID, and initializes empty hardware context.
+    """
+    ensure_db_user_exists(db, current_user)
+    existing = db.query(models.Workspace).filter_by(user_id=current_user["uid"], name=payload.name).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="A workspace with this name already exists.")
+        
+    import re
+    ws_id = re.sub(r'[^a-z0-9]', '_', payload.name.lower()).strip('_')
+    if not ws_id:
+        ws_id = "workspace"
+        
+    base_id = ws_id
+    counter = 1
+    while db.query(models.Workspace).filter_by(id=ws_id).first():
+        ws_id = f"{base_id}_{counter}"
+        counter += 1
+        
+    workspace = models.Workspace(
+        id=ws_id,
+        user_id=current_user["uid"],
+        name=payload.name
+    )
+    db.add(workspace)
+    db.commit()
+    db.refresh(workspace)
+    
+    hc = models.HardwareContext(
+        workspace_id=workspace.id,
+        mcu="ESP32-WROOM",
+        framework="Arduino",
+        compiler="Xtensa GCC",
+        board="ESP32 DevModule",
+        platformio_env="esp32dev",
+        clocks={"sysclk_mhz": 240, "apb1_mhz": 0, "apb2_mhz": 0},
+        gpios=[],
+        peripherals=[]
+    )
+    db.add(hc)
+    db.commit()
+    
+    return {"id": workspace.id, "name": workspace.name}
+
+@router.post("/api/workspace/{id}/rename")
+async def rename_workspace(
+    id: str,
+    payload: schemas.WorkspaceRenamePayload,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Renames an existing workspace.
+    """
+    ensure_db_user_exists(db, current_user)
+    workspace = db.query(models.Workspace).filter_by(id=id, user_id=current_user["uid"]).first()
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found.")
+        
+    existing = db.query(models.Workspace).filter(
+        models.Workspace.user_id == current_user["uid"],
+        models.Workspace.name == payload.name,
+        models.Workspace.id != id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Another workspace already has this name.")
+        
+    workspace.name = payload.name
+    db.commit()
+    return {"status": "success", "message": "Workspace renamed successfully."}
 
 @router.get("/api/hardware")
 async def get_hardware_context(
@@ -101,8 +204,11 @@ async def save_hardware(
         ensure_db_user_exists(db, current_user)
         
         # 1. Verify or create workspace ownership
-        workspace = db.query(models.Workspace).filter_by(id=data.workspace_id, user_id=current_user["uid"]).first()
-        if not workspace:
+        workspace = db.query(models.Workspace).filter_by(id=data.workspace_id).first()
+        if workspace:
+            if workspace.user_id != current_user["uid"]:
+                raise HTTPException(status_code=403, detail="Workspace access forbidden (owned by another user).")
+        else:
             workspace = models.Workspace(
                 id=data.workspace_id,
                 user_id=current_user["uid"],
@@ -344,7 +450,7 @@ async def chat_assistant(
         
         # Multi-level validation checks
         framework_errors = analyze_static_code(response_text, context_dict)
-        register_errors = post_validate_registers(response_text, context_dict["mcu"])
+        register_errors = post_validate_registers(response_text, context_dict["mcu"], context_dict)
         behavior_errors = verify_functional_behavior(response_text, plan.intents[0] if plan.intents else "")
         
         # Run compilation check
@@ -454,7 +560,7 @@ async def chat_assistant(
     # 4. Generate using Gemini with Self-Healing Verification Loop
     logs.append(f"Sending system instructions downstream to Google Gemini API (Strategy: {plan.generation_strategy})...")
     
-    max_retries = 3
+    max_retries = 1
     retry_count = 0
     response_text = await generate_firmware_code(request.prompt, system_instruction, context_dict, user_api_key=user_api_key)
     
@@ -464,7 +570,7 @@ async def chat_assistant(
         syntax_errors.append("Syntax Error: Generated C code block appears truncated or incorrect.")
     
     framework_errors = analyze_static_code(response_text, context_dict)
-    register_errors = post_validate_registers(response_text, context_dict["mcu"])
+    register_errors = post_validate_registers(response_text, context_dict["mcu"], context_dict)
     behavior_errors = verify_functional_behavior(response_text, plan.intents[0] if plan.intents else "")
     
     # Run compilation check
@@ -494,7 +600,7 @@ async def chat_assistant(
         if not response_text.startswith("/*") and not response_text.startswith("#include") and not response_text.startswith("void") and not response_text.startswith("const"):
             syntax_errors.append("Syntax Error: Generated C code block appears truncated or incorrect.")
         framework_errors = analyze_static_code(response_text, context_dict)
-        register_errors = post_validate_registers(response_text, context_dict["mcu"])
+        register_errors = post_validate_registers(response_text, context_dict["mcu"], context_dict)
         behavior_errors = verify_functional_behavior(response_text, plan.intents[0] if plan.intents else "")
         
         # Re-verify compilation
@@ -502,6 +608,59 @@ async def chat_assistant(
         all_errors = syntax_errors + framework_errors + register_errors + behavior_errors + comp_errors
 
     logs.append(f"Firmware verification pipeline completed after {retry_count} repairs.")
+
+    if all_errors:
+        logs.append("Validation failed after auto-healing. Generation rejected.")
+        reason = "; ".join(all_errors)
+        suggested_fix = "Please verify your pin assignments, alternate function mode settings, or clock configurations."
+        if framework_errors:
+            suggested_fix = "Ensure you are using standard entry points and including the proper framework header files."
+        elif register_errors:
+            suggested_fix = "Check for hallucinated register macros or addresses not belonging to this MCU."
+        elif behavior_errors:
+            suggested_fix = "Verify your prompt requirements can be satisfied by the configured hardware peripherals."
+            
+        error_msg = f"/*\n * GENERATION FAILED\n * ==========================================================\n * The generated code did not pass PinMind's verification pipeline.\n * Reason(s): {reason}\n * Suggested Fix: {suggested_fix}\n * ==========================================================\n */"
+        
+        validation_report = {
+            "quality_report": {
+                "hardware_context": "Failed" if any("GPIO" in e or "Pin" in e for e in all_errors) else "Passed",
+                "framework": "Failed" if framework_errors else "Passed",
+                "behavior": "Failed" if behavior_errors else "Passed",
+                "registers": "Failed" if register_errors else "Passed",
+                "compilation": "Failed" if "Compiler" in reason or "Syntax" in reason else "Passed",
+                "source": "Gemini (Rejected)"
+            },
+            "errors": all_errors,
+            "retries": retry_count,
+            "why_explanations": why_explanations,
+            "metadata": {
+                "planner_version": plan.planner_version,
+                "raw_prompt": plan.raw_prompt,
+                "normalized_prompt": plan.normalized_prompt,
+                "intents": plan.intents,
+                "parameters": plan.parameters,
+                "complexity": plan.complexity,
+                "strategy": plan.generation_strategy
+            }
+        }
+        
+        system_chat = models.ChatHistory(
+            workspace_id=workspace.id,
+            role="system",
+            content=error_msg,
+            metadata_json={"validation_report": validation_report, "hardware_hash": current_hash, "template_version": "v4.0"}
+        )
+        db.add(system_chat)
+        db.commit()
+        
+        return {
+            "response": error_msg,
+            "logs": logs,
+            "has_conflict": True,
+            "conflicts": [{"type": "Generation Failed", "resource": "Firmware Code", "message": reason, "solutions": [suggested_fix]}],
+            "validation_report": validation_report
+        }
 
     validation_report = {
         "quality_report": {
