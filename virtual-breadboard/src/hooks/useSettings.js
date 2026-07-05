@@ -79,7 +79,7 @@ export function useSettings(authToken) {
     if (!authToken) return;
     const fetchRemoteSettings = async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/user/preferences', {
+        const res = await fetch('https://pinmind001.onrender.com', {
           headers: { 'Authorization': `Bearer ${authToken}` }
         });
         if (res.ok) {
@@ -115,7 +115,7 @@ export function useSettings(authToken) {
       
       // Save TO backend in the background
       if (authToken) {
-        fetch('http://localhost:8000/api/user/preferences', {
+        fetch('https://pinmind001.onrender.com/api/user/preferences', {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',

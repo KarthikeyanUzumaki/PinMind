@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 
-const BACKEND_URL = 'http://localhost:8000';
+const BACKEND_URL = 'https://pinmind001.onrender.com';
 
 export default function OnboardingPage({ authToken, onComplete }) {
   const [apiKey, setApiKey]       = useState('');

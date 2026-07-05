@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { logoutUser } from '../firebase';
 
-const BACKEND_URL = 'http://localhost:8000';
+const BACKEND_URL = 'https://pinmind001.onrender.com';
 
 // ─── Helper Components ──────────────────────────────────────────────────────
 

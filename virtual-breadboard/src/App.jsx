@@ -16,7 +16,7 @@ import WorkspacePage    from './pages/WorkspacePage';
 import SettingsPage     from './pages/SettingsPage';
 import CommandPalette   from './components/CommandPalette';
 
-const BACKEND_URL = 'http://localhost:8000';
+const BACKEND_URL = 'https://pinmind001.onrender.com';
 
 // ─── Spinner shown during Firebase session restoration ───────────────────────
 const SessionSpinner = () => (
